@@ -7,7 +7,7 @@ This is a temporary script file.
 
 import numpy as np
 from collections import OrderedDict
-
+import matplotlib.pyplot as plt
 
 class Map(object):
     def __init__(self, N):
@@ -21,6 +21,15 @@ class Map(object):
         self.MAP[i,j] = 0
         # remember free indexes?
         
+    def draw(self, path = None):
+        #ax = plt.gca()
+        plt.pcolor(self.MAP.T, cmap = plt.get_cmap('Greys'))
+        
+        
+        if path is not None:
+            plt.plot(path[0], path[1], '-r')
+        
+        plt.show()
     ## A*
     class Node(object):
         def __init__(self, x, y, cost, parent_ind):
@@ -80,12 +89,14 @@ class Map(object):
                     if open_nodes[new_node_id] > new_node:
                         open_nodes[new_node_id] = new_node # for better path
                         
-        path = []
-        path.append((goal_node.x, goal_node.y))
+        path = [[],[]]
+        path[0].append(goal_node.x)
+        path[1].append(goal_node.y)
         parent_ind = goal_node.parent_ind
         while parent_ind != -1:
             node = closed_nodes[parent_ind]
-            path.append((node.x, node.y))
+            path[0].append(node.x)
+            path[1].append(node.y)
             parent_ind = node.parent_ind
             
         return path
@@ -171,16 +182,20 @@ class InputEmulator(object):
         print("Iterations:\n{}".format(self.iterations))
                                    
             
-
 if __name__ == '__main__':
     print(np.__version__)
     
-    test_file_path = 'test_data/03'
+    test_file_path = 'test_data/10'
     IE = InputEmulator(test_file_path)
-    IE.print()
+    #IE.print()
     
-    plan = IE.MAP.plan(IE.iterations[0][0])
+    for i in range(IE.T):
+        if len(IE.iterations[i]) != 0:
+            plan = IE.MAP.plan(IE.iterations[i][0])
+            break
     print(plan, len(plan))
+    
+    IE.MAP.draw(plan)
     '''
     node = IE.MAP.Node(2,0,0,-1)
     i = IE.MAP.node_index(node)
