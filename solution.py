@@ -44,8 +44,7 @@ class Map(object):
     def get_random_free_point(self):
         index = np.random.randint(0, len(self.free_indexes))
         return self.index_to_xy(self.free_indexes[index])
-        
-        
+                
     ## A*
     class Node(object):
         def __init__(self, x, y, cost, parent_ind):
@@ -115,9 +114,7 @@ class Map(object):
             path[1].append(node.y)
             parent_ind = node.parent_ind
             
-        return path
-            
-            
+        return path    
             
     def calc_h(self, n1, n2):
         # manhattan metrics
@@ -190,8 +187,7 @@ class InputEmulator(object):
         print("Cost_c = {}".format(self.Cost_c))
         print("Map:\n{}".format(self.MAP.MAP))
         print("Iterations:\n{}".format(self.iterations))
-                                   
-            
+                                               
 if __name__ == '__main__':
     #print(np.__version__)
     
@@ -214,10 +210,4 @@ if __name__ == '__main__':
     print(IE.MaxTips - len(plan1[0]) + len(plan2[0]))
     plt.show()
     
-    '''
-    node = IE.MAP.Node(2,0,0,-1)
-    i = IE.MAP.node_index(node)
-    print(i)
-    x,y = IE.MAP.node_xy(node, i)
-    print(x,y)
-    '''
+    
