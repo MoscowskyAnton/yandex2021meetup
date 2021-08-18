@@ -13,6 +13,7 @@ class Map(object):
     def __init__(self, N):
         self.MAP = np.zeros((N, N))
         self.N = N
+        self.free_indexes = []
         
     def add_obst(self, i, j):
         self.MAP[i,j] = 1
@@ -20,16 +21,31 @@ class Map(object):
     def add_free(self, i, j):
         self.MAP[i,j] = 0
         # remember free indexes?
+        self.free_indexes.append(self.xy_to_index(i, j))
         
-    def draw(self, path = None):
-        #ax = plt.gca()
+    def xy_to_index(self, x, y):
+        return y * self.N + x
+        
+    def index_to_xy(self, index):
+        x = index % self.N
+        y = int((index - x) / self.N)
+        return (x, y)
+        
+    def draw_map(self):
         plt.pcolor(self.MAP.T, cmap = plt.get_cmap('Greys'))
+    
+    def draw_path(self, path, color = 'red'):    
+        plt.plot(path[0], path[1], '--', color = color)   
+        plt.plot(path[0][0], path[1][0], "*", color = color)
+    
+    def draw_bot(self, pose):
+        plt.plot(pose[0], pose[1], 'ob')        
+        
+    def get_random_free_point(self):
+        index = np.random.randint(0, len(self.free_indexes))
+        return self.index_to_xy(self.free_indexes[index])
         
         
-        if path is not None:
-            plt.plot(path[0], path[1], '-r')
-        
-        plt.show()
     ## A*
     class Node(object):
         def __init__(self, x, y, cost, parent_ind):
@@ -48,9 +64,9 @@ class Map(object):
         def __gt__(self, other):
             return self.cost > other.cost
             
-    def plan(self, order):
-        start_node = self.Node(order.s_row, order.s_col, 0.0, -1)
-        goal_node = self.Node(order.f_row, order.f_col, 0.0, -1)
+    def plan(self, start, goal):
+        start_node = self.Node(start[0], start[1], 0.0, -1)
+        goal_node = self.Node(goal[0], goal[1], 0.0, -1)
         
         open_nodes = {}
         closed_nodes = {}
@@ -105,19 +121,13 @@ class Map(object):
             
     def calc_h(self, n1, n2):
         # manhattan metrics
-        return abs(n1.x - n2.x) + abs(n1.y - n2.y)
+        #return abs(n1.x - n2.x) + abs(n1.y - n2.y)
         # euclidian
-        #return np.hypot(n1.x - n2.x, n1.y - n2.y)
+        return np.hypot(n1.x - n2.x, n1.y - n2.y)
         
     def node_index(self, node):
-        return node.y * self.N + node.x   
-
-    def node_xy(self, node, index):
-        x = index % self.N
-        y = int((index - x) / self.N)
-        return (x, y)
-        
-            
+        return self.xy_to_index(node.x, node.y)
+                    
     def motion(self):
         return [[1,0,1],[-1,0,1],[0,1,1],[0,-1,1]]
     
@@ -183,19 +193,27 @@ class InputEmulator(object):
                                    
             
 if __name__ == '__main__':
-    print(np.__version__)
+    #print(np.__version__)
     
-    test_file_path = 'test_data/10'
+    test_file_path = 'test_data/08'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
+    rover_start = IE.MAP.get_random_free_point()
     for i in range(IE.T):
         if len(IE.iterations[i]) != 0:
-            plan = IE.MAP.plan(IE.iterations[i][0])
+            plan1 = IE.MAP.plan((IE.iterations[i][0].s_row, IE.iterations[i][0].s_col), (IE.iterations[i][0].f_row, IE.iterations[i][0].f_col))
+            plan2 = IE.MAP.plan(rover_start, (IE.iterations[i][0].s_row, IE.iterations[i][0].s_col))
             break
-    print(plan, len(plan))
+    #print(plan, len(plan))
     
-    IE.MAP.draw(plan)
+    IE.MAP.draw_map()
+    IE.MAP.draw_path(plan1, 'red')
+    IE.MAP.draw_path(plan2, 'blue')
+    IE.MAP.draw_bot(rover_start)
+    print(IE.MaxTips - len(plan1[0]) + len(plan2[0]))
+    plt.show()
+    
     '''
     node = IE.MAP.Node(2,0,0,-1)
     i = IE.MAP.node_index(node)
