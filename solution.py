@@ -41,7 +41,7 @@ class Map(object):
     def draw_order(self, order):
         x, y = order.get_start()
         x1, y1 = order.get_final()
-        plt.plot(x, y, '*', color = 'green')
+        plt.plot(x, y, 'o', color = 'green')
         plt.plot(x1, y1, '*', color = 'green')
         plt.plot([x, x1], [y, y1], '--', color = 'green')
     
@@ -153,6 +153,8 @@ class Order(object):
         
         self.appear_t = appear_t
         
+        self.path = None
+        
     def __str__(self):
         return "[t={}] ({};{})-->({};{})".format(self.appear_t, self.s_row, self.s_col, self.f_row, self.f_col)
     
@@ -223,7 +225,11 @@ class Robot(object):
         return (self.x, self.y)
     
     def __str__(self):        
-        return "[BOT{} S:{}|P:({};{})]".format(self.id, self.state, self.x, self.y)
+        str_path = 'no path'
+        if len(self.path1) and len(self.path2):
+            if len(self.path1[0]) and len(self.path2[0]):
+                str_path = "({};{})->({};{})".format(self.path1[0][-1], self.path1[1][-1], self.path2[0][0], self.path2[1][0])
+        return "[BOT{} S:{}|P:({};{})|{}]".format(self.id, self.state, self.x, self.y, str_path)
     
     def __repr__(self):
         return self.__str__()
@@ -232,38 +238,40 @@ class OrderTable(object):
     def __init__(self, robots, MAP):
         self.MAP = MAP        
         self.free_robots = robots                
-        self.busy_robots = []
-                
-        self.orders = []
-        
+        self.busy_robots = []                
+        self.orders = []        
         
     def add_iter(self, iteration):        
+        for order in iteration:
+            order.path = self.MAP.plan(order.get_start(), order.get_final())
+            
         self.orders += iteration
             
     def make_table(self):        
         self.full_table = [[None] * len(self.orders)] * len(self.free_robots)
-        self.score_table = np.zeros((len(self.free_robots),len(self.orders)))
-        
+        self.score_table = np.zeros((len(self.free_robots),len(self.orders)))        
         
         for oi, order in enumerate(self.orders):
             for bi, bot in enumerate(self.free_robots):
-                self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), self.MAP.plan(order.get_start(),order.get_final()))
-                self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) # TODO exparation time and if more than MaxTips dont do that
-        
-        print(self.score_table)
+                self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
+                self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) # TODO expiration time and if more than MaxTips dont do that        
+        #print(self.score_table)
     
     def greedy_task(self):
         while len(self.free_robots) and len(self.orders):
+            print(self.score_table)
             r, o = np.unravel_index(np.argmin(self.score_table), self.score_table.shape)
-            print("{}->{}".format(r, o))
+            print("id{}(#{})->{}".format(self.free_robots[r].id,r, o))
             
-            self.busy_robots.append(self.free_robots[r])
+            # those indexes can be wrong, but sometimes
+            current = self.free_robots[r]
+            current.path1 = self.full_table[r][o][0]
+            current.path2 = self.full_table[r][o][1]
+            current.state = Robot.REACHING_ORDER
+            
+            self.busy_robots.append(current)
             del self.free_robots[r]
-            
-            self.busy_robots[-1].path1 = self.full_table[r][o][0]
-            self.busy_robots[-1].path2 = self.full_table[r][o][1]
-            self.busy_robots[-1].state = Robot.REACHING_ORDER
-            
+                                    
             del self.orders[o]
             
             np.delete(self.score_table, r, 0)
@@ -277,15 +285,17 @@ class OrderTable(object):
             
             del self.full_table[r]
             for row in self.full_table:
-                print('ln ind row',len(row), o, row)
+                #print('ln ind row',len(row), o, row)
                 del row[o]
             
             
     def print_bots(self):
-        print(self.free_robots)
-        print(self.busy_robots)
+        print('free',self.free_robots)
+        print('busy',self.busy_robots)
+        
         
     def do_step(self):
+        self.print_bots()
         remove_idle = []
         for bi, bot in enumerate(self.busy_robots):
             if bot.state == Robot.REACHING_ORDER:
@@ -308,8 +318,10 @@ class OrderTable(object):
                     del bot.path2[1][-1]
             elif bot.state == Robot.UNLOADING:
                 bot.state = Robot.IDLE
+            elif bot.state == Robot.IDLE:
                 remove_idle.append(bi)
-        
+                
+        self.print_bots()
         for bi in remove_idle:
             self.free_robots.append(self.busy_robots[bi])            
         for bi in sorted(remove_idle, reverse=True):
@@ -323,11 +335,11 @@ class OrderTable(object):
             
 if __name__ == '__main__':    
     
-    test_file_path = 'test_data/07'
+    test_file_path = 'test_data/02'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
-    R = 1
+    R = 2
     rovers = []
     for r in range(R):        
         rover_start = IE.MAP.get_random_free_point()
@@ -336,16 +348,25 @@ if __name__ == '__main__':
     OT = OrderTable(rovers, IE.MAP)
     
     OT.MAP.draw_map()
+    
+    for bot in rovers:
+        OT.MAP.draw_bot(bot.get_pose(), 'yellow')
+    OT.print_bots()        
+    
     for i in range(IE.T):
+        print(i)
         if len(IE.iterations[i]) != 0:
             for order in IE.iterations[i]:
                 OT.MAP.draw_order(order)                
             OT.add_iter(IE.iterations[i])                        
             for s in range(60):
-                OT.make_table()            
-                OT.greedy_task()
+                print('---------step--------')
+                
+                OT.make_table()                            
+                OT.greedy_task()                
                 OT.print_bots()
                 OT.do_step()                                                
+                
     
     
     #for i in range(IE.T):
