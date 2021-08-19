@@ -254,14 +254,19 @@ class OrderTable(object):
         for oi, order in enumerate(self.orders):
             for bi, bot in enumerate(self.free_robots):
                 self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
+                print(self.full_table[bi][oi]) # here different
                 self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
+        print("==================")
+        print(self.full_table) # same! wtf
     
     def greedy_task(self):
         while len(self.free_robots) and len(self.orders):
             print(self.score_table)
             r, o = np.unravel_index(np.argmin(self.score_table), self.score_table.shape)
             print("id{}(#{})->{}".format(self.free_robots[r].id,r, o))
+            
+            print(self.full_table) # here full table same
             
             # those indexes can be wrong, but sometimes
             current = self.free_robots[r]
