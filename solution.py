@@ -248,25 +248,30 @@ class OrderTable(object):
         self.orders += iteration
             
     def make_table(self):        
-        self.full_table = [[None] * len(self.orders)] * len(self.free_robots)
+        #self.full_table = [None] * len(self.orders)] * len(self.free_robots)
+        self.full_table = []
+        for bi in range(len(self.free_robots)):
+            self.full_table.append([])
+            for oi in range(len(self.orders)):
+                self.full_table[bi].append(None)
         self.score_table = np.zeros((len(self.free_robots),len(self.orders)))        
         
         for oi, order in enumerate(self.orders):
-            for bi, bot in enumerate(self.free_robots):
+            for bi, bot in enumerate(self.free_robots):                
                 self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
-                print(self.full_table[bi][oi]) # here different
+                #print(self.full_table[bi][oi]) # here different
                 self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
-        print("==================")
-        print(self.full_table) # same! wtf
+        #print("==================")
+        #print(self.full_table) # same! wtf
     
     def greedy_task(self):
         while len(self.free_robots) and len(self.orders):
-            print(self.score_table)
+            print(self.score_table)            
             r, o = np.unravel_index(np.argmin(self.score_table), self.score_table.shape)
-            print("id{}(#{})->{}".format(self.free_robots[r].id,r, o))
-            
-            print(self.full_table) # here full table same
+            #print("id{}(#{})->{}".format(self.free_robots[r].id,r, o))
+            print(r,o, self.free_robots)
+            #print(self.full_table) # here full table same
             
             # those indexes can be wrong, but sometimes
             current = self.free_robots[r]
@@ -279,9 +284,9 @@ class OrderTable(object):
                                     
             del self.orders[o]
             
-            np.delete(self.score_table, r, 0)
-            np.delete(self.score_table, o, 1)
-            
+            self.score_table = np.delete(self.score_table, r, 0)
+            self.score_table = np.delete(self.score_table, o, 1)
+            print(self.score_table)  
             #print(self.full_table)
             #print('len',len(self.full_table))
             
@@ -340,7 +345,7 @@ class OrderTable(object):
             
 if __name__ == '__main__':    
     
-    test_file_path = 'test_data/02'
+    test_file_path = 'test_data/03'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
@@ -356,7 +361,7 @@ if __name__ == '__main__':
     
     for bot in rovers:
         OT.MAP.draw_bot(bot.get_pose(), 'yellow')
-    OT.print_bots()        
+    #OT.print_bots()        
     
     for i in range(IE.T):
         print(i)
@@ -365,11 +370,11 @@ if __name__ == '__main__':
                 OT.MAP.draw_order(order)                
             OT.add_iter(IE.iterations[i])                        
             for s in range(60):
-                print('---------step--------')
+                #print('---------step--------')
                 
                 OT.make_table()                            
                 OT.greedy_task()                
-                OT.print_bots()
+                #OT.print_bots()
                 OT.do_step()                                                
                 
     
