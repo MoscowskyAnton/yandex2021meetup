@@ -323,11 +323,11 @@ class OrderTable(object):
             
 if __name__ == '__main__':    
     
-    test_file_path = 'test_data/02'
+    test_file_path = 'test_data/07'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
-    R = 2
+    R = 1
     rovers = []
     for r in range(R):        
         rover_start = IE.MAP.get_random_free_point()
