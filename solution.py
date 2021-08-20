@@ -1,13 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Spyder Editor
 
-This is a temporary script file.
-"""
 
 import numpy as np
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import sys
 
 class Map(object):
     def __init__(self, N):
@@ -174,15 +170,16 @@ class InputReader(object):
         pass
     
     def read_params1(self):
-        params = input().split()
-        self.N = int(params[0]) # map size
-        self.MaxTips = int(params[1]) # reward for order
-        self.Cost_c = int(params[2]) # rover cost
+        #params = sys.stdin.readline().split()
+        params = list(map(int, input().split()))
+        self.N = params[0] # map size
+        self.MaxTips = params[1] # reward for order
+        self.Cost_c = params[2] # rover cost
         
     def read_map(self):
         self.MAP = Map(self.N)
         for i in range(self.N):
-            map_line = input()
+            map_line = input()#sys.stdin.readline()
             for j in range(self.N):# must be
                 if map_line[j] == '#':
                     self.MAP.add_obst(i,j)
@@ -190,15 +187,17 @@ class InputReader(object):
                     self.MAP.add_free(i,j)
                     
     def read_params2(self):
-        params = input().split()
-        self.T = int(params[0]) # iterations
-        self.D = int(params[1]) # total orders number
+        params = list(map(int, input().split()))
+        self.T = params[0] # iterations
+        self.D = params[1] # total orders number
         
     def read_iteration(self, num):
         iteration = []
-        iter_order_num = int(input())
+        iter_order_num = int(sys.stdin.readline())
+        
         for j in range(iter_order_num):
-            iteration.append(Order(input().split(), num))
+            #iteration.append(Order(sys.stdin.readline().split(), num))
+            iteration.append(Order(list(map(int, input().split())), num))
         return iteration
 
 class InputEmulator(object):
@@ -403,14 +402,14 @@ class OrderTable(object):
                 bot.path2 = []
                 #self.rover_actions[bot.id].append('S')
                 
-        for bi, bot in enumerate(self.free_robots):
-            self.rover_actions[bot.id].append('S')
-                
         #self.print_bots()
         for bi in remove_idle:
             self.free_robots.append(self.busy_robots[bi])            
         for bi in sorted(remove_idle, reverse=True):
             del self.busy_robots[bi]
+            
+        for bi, bot in enumerate(self.free_robots):
+            self.rover_actions[bot.id].append('S')
         
         #for bot in self.free_robots:
             #self.MAP.draw_bot(bot.get_pose(), 'blue')
@@ -456,22 +455,37 @@ def work_with_input():
     IR.read_params2()
     
     R = 1
-    print(R)
-    rovers = []
-    for r in range(R):        
-        #rover_start = IR.MAP.get_random_free_point()
-        rover_start = (3,3)
-        rovers.append(Robot(rover_start[0], rover_start[1], r))
-        print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
     
-    #flush()
+    #sys.stdout.write("%d\n" % R)
+    #sys.stdout.flush()
+    print(R)
+    
+    rovers = []
+    rovers_str = ""
+    for r in range(R):        
+        rover_start = IR.MAP.get_random_free_point()
+        #rover_start = (3,3)
+        rovers.append(Robot(rover_start[0], rover_start[1], r))
+        #print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
+        new_str = "{} {}".format(rover_start[0]+1, rover_start[1]+1)
+        #rovers_str += " "+new_str
+        #sys.stdout.write(new_str+"\n")
+        #sys.stdout.write("%d %d\n" % rover_start)
+        #sys.stdout.flush()
+        #print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
+        print(new_str)
+    #print(rovers_str)
+    #sys.stdout.flush()
+        
     OT = OrderTable(rovers, IR.MAP)
     for i in range(IR.T):
         iteration = IR.read_iteration(i)
         OT.add_iter(iteration)
         OT.do_iter()
         for bot_a in OT.rover_actions:
-            print("".join(bot_a))
+            #sys.stdout.write("".join(bot_a)+"\n")
+            print("".join(bot_a), flush = True)
+            #sys.stdout.flush()
         
     
     
