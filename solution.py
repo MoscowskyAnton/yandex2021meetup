@@ -120,14 +120,16 @@ class Map(object):
             path[0].append(node.x)
             path[1].append(node.y)
             parent_ind = node.parent_ind
-            
+        del path[0][-1]#?
+        del path[1][-1]#?
+        
         return path    
             
     def calc_h(self, n1, n2):
         # manhattan metrics
-        #return abs(n1.x - n2.x) + abs(n1.y - n2.y)
+        return abs(n1.x - n2.x) + abs(n1.y - n2.y)
         # euclidian
-        return np.hypot(n1.x - n2.x, n1.y - n2.y)
+        #return np.hypot(n1.x - n2.x, n1.y - n2.y)
         
     def node_index(self, node):
         return self.xy_to_index(node.x, node.y)
@@ -166,6 +168,38 @@ class Order(object):
     
     def get_final(self):
         return (self.f_row, self.f_col)
+
+class InputReader(object):
+    def __init__(self):
+        pass
+    
+    def read_params1(self):
+        params = input().split()
+        self.N = int(params[0]) # map size
+        self.MaxTips = int(params[1]) # reward for order
+        self.Cost_c = int(params[2]) # rover cost
+        
+    def read_map(self):
+        self.MAP = Map(self.N)
+        for i in range(self.N):
+            map_line = input()
+            for j in range(self.N):# must be
+                if map_line[j] == '#':
+                    self.MAP.add_obst(i,j)
+                if map_line[j] == '.':
+                    self.MAP.add_free(i,j)
+                    
+    def read_params2(self):
+        params = input().split()
+        self.T = int(params[0]) # iterations
+        self.D = int(params[1]) # total orders number
+        
+    def read_iteration(self, num):
+        iteration = []
+        iter_order_num = int(input())
+        for j in range(iter_order_num):
+            iteration.append(Order(input().split(), num))
+        return iteration
 
 class InputEmulator(object):
     def __init__(self, file_path):
@@ -221,6 +255,7 @@ class Robot(object):
         self.path1 = []
         self.path2 = []
         
+        
     def get_pose(self):
         return (self.x, self.y)
     
@@ -240,6 +275,7 @@ class OrderTable(object):
         self.free_robots = robots                
         self.busy_robots = []                
         self.orders = []        
+        self.total_time = 0
         
     def add_iter(self, iteration):        
         for order in iteration:
@@ -260,17 +296,20 @@ class OrderTable(object):
             for bi, bot in enumerate(self.free_robots):                
                 self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
                 #print(self.full_table[bi][oi]) # here different
-                self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) # TODO expiration time and if more than MaxTips dont do that        
+                
+                self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) + (self.total_time - order.appear_t* 60) 
+                
+                # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
         #print("==================")
         #print(self.full_table) # same! wtf
     
     def greedy_task(self):
         while len(self.free_robots) and len(self.orders):
-            print(self.score_table)            
+            #print(self.score_table)            
             r, o = np.unravel_index(np.argmin(self.score_table), self.score_table.shape)
             #print("id{}(#{})->{}".format(self.free_robots[r].id,r, o))
-            print(r,o, self.free_robots)
+            #print(r,o, self.free_robots)
             #print(self.full_table) # here full table same
             
             # those indexes can be wrong, but sometimes
@@ -286,7 +325,7 @@ class OrderTable(object):
             
             self.score_table = np.delete(self.score_table, r, 0)
             self.score_table = np.delete(self.score_table, o, 1)
-            print(self.score_table)  
+            #print(self.score_table)  
             #print(self.full_table)
             #print('len',len(self.full_table))
             
@@ -303,58 +342,96 @@ class OrderTable(object):
         print('free',self.free_robots)
         print('busy',self.busy_robots)
         
+    def do_iter(self):
+        self.rover_actions = []
+        for r in range(len(self.free_robots)+len(self.busy_robots)):
+            self.rover_actions.append([])
         
+        for s in range(60):
+            self.make_table()                            
+            self.greedy_task()                
+            self.do_step() 
+    
+    def motion(self, start, end):
+        dx = start[0] - end[0]
+        dy = start[1] - end[1]
+        if dy == 1:
+            return 'L'
+        if dy == -1:
+            return 'R'
+        if dx == 1:
+            return 'U'
+        if dx == -1:
+            return 'D'
+        if dx == 0 and dy == 0:
+            return 'S'
+        return '#'
+    
     def do_step(self):
-        self.print_bots()
+        self.total_time += 1
+        #self.print_bots()
         remove_idle = []
         for bi, bot in enumerate(self.busy_robots):
             if bot.state == Robot.REACHING_ORDER:
                 if len(bot.path1[0]) == 0:
                     bot.state = Robot.PICKING_ORDER
+                    self.rover_actions[bot.id].append('T')
                 else:
+                    self.rover_actions[bot.id].append(self.motion(bot.get_pose(), (bot.path1[0][-1], bot.path1[1][-1])))
                     bot.x = bot.path1[0][-1]
                     bot.y = bot.path1[1][-1]
                     del bot.path1[0][-1]
                     del bot.path1[1][-1]
-            elif bot.state == Robot.PICKING_ORDER:
-                bot.state = Robot.DELIVERING
-            elif bot.state == Robot.DELIVERING:
+            elif bot.state == Robot.PICKING_ORDER or bot.state == Robot.DELIVERING:
+                if bot.state == Robot.PICKING_ORDER:
+                    bot.state = Robot.DELIVERING
                 if len(bot.path2[0]) == 0:
                     bot.state = Robot.UNLOADING
+                    self.rover_actions[bot.id].append('P')
                 else:
+                    self.rover_actions[bot.id].append(self.motion(bot.get_pose(), (bot.path2[0][-1], bot.path2[1][-1])))
                     bot.x = bot.path2[0][-1]
                     bot.y = bot.path2[1][-1]
                     del bot.path2[0][-1]
                     del bot.path2[1][-1]
             elif bot.state == Robot.UNLOADING:
                 bot.state = Robot.IDLE
+                self.rover_actions[bot.id].append('S')
             elif bot.state == Robot.IDLE:
                 remove_idle.append(bi)
+                bot.path1 = []
+                bot.path2 = []
+                #self.rover_actions[bot.id].append('S')
                 
-        self.print_bots()
+        for bi, bot in enumerate(self.free_robots):
+            self.rover_actions[bot.id].append('S')
+                
+        #self.print_bots()
         for bi in remove_idle:
             self.free_robots.append(self.busy_robots[bi])            
         for bi in sorted(remove_idle, reverse=True):
             del self.busy_robots[bi]
         
-        for bot in self.free_robots:
-            OT.MAP.draw_bot(bot.get_pose(), 'blue')
-        for bot in self.busy_robots:
-            OT.MAP.draw_bot(bot.get_pose(), 'red')
-        plt.pause(0.0001)
-            
-if __name__ == '__main__':    
+        #for bot in self.free_robots:
+            #self.MAP.draw_bot(bot.get_pose(), 'blue')
+        #for bot in self.busy_robots:
+            #self.MAP.draw_bot(bot.get_pose(), 'red')
+        #plt.pause(0.0001)
+               
     
-    test_file_path = 'test_data/03'
+def test_on_file():    
+    
+    test_file_path = 'test_data/01'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
-    R = 2
+    R = 1
     rovers = []
     for r in range(R):        
         rover_start = IE.MAP.get_random_free_point()
-        rovers.append(Robot(rover_start[0], rover_start[1], r))
-    
+        #rovers.append(Robot(rover_start[0], rover_start[1], r))
+        rovers.append(Robot(3, 3, r))    
+        
     OT = OrderTable(rovers, IE.MAP)
     
     OT.MAP.draw_map()
@@ -364,34 +441,42 @@ if __name__ == '__main__':
     #OT.print_bots()        
     
     for i in range(IE.T):
-        print(i)
-        if len(IE.iterations[i]) != 0:
-            for order in IE.iterations[i]:
-                OT.MAP.draw_order(order)                
-            OT.add_iter(IE.iterations[i])                        
-            for s in range(60):
-                #print('---------step--------')
-                
-                OT.make_table()                            
-                OT.greedy_task()                
-                #OT.print_bots()
-                OT.do_step()                                                
-                
-    
-    
-    #for i in range(IE.T):
+        print("{}/{}".format(i,IE.T))
         #if len(IE.iterations[i]) != 0:
-            #plan1 = IE.MAP.plan((IE.iterations[i][0].s_row, IE.iterations[i][0].s_col), (IE.iterations[i][0].f_row, IE.iterations[i][0].f_col))
-            #plan2 = IE.MAP.plan(rover_start, (IE.iterations[i][0].s_row, IE.iterations[i][0].s_col))
-            #break
-            
-    #IE.MAP.draw_map()
-    #IE.MAP.draw_path(plan1, 'red')
-    #IE.MAP.draw_path(plan2, 'blue')
-    #IE.MAP.draw_bot(rover_start)    
-    #print(IE.MaxTips - len(plan1[0]) + len(plan2[0]))
-    #plt.show()
+        for order in IE.iterations[i]:
+            OT.MAP.draw_order(order)                
+        OT.add_iter(IE.iterations[i])                        
+        OT.do_iter()   
+        print(OT.rover_actions)
+
+def work_with_input():
+    IR = InputReader()
+    IR.read_params1()
+    IR.read_map()
+    IR.read_params2()
+    
+    R = 1
+    print(R)
+    rovers = []
+    for r in range(R):        
+        #rover_start = IR.MAP.get_random_free_point()
+        rover_start = (3,3)
+        rovers.append(Robot(rover_start[0], rover_start[1], r))
+        print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
+    
+    #flush()
+    OT = OrderTable(rovers, IR.MAP)
+    for i in range(IR.T):
+        iteration = IR.read_iteration(i)
+        OT.add_iter(iteration)
+        OT.do_iter()
+        for bot_a in OT.rover_actions:
+            print("".join(bot_a))
+        
     
     
+if __name__ == '__main__': 
+    #test_on_file()
+    work_with_input()
     
     
