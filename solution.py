@@ -304,12 +304,19 @@ class OrderTable(object):
         self.score_table = np.zeros((len(self.free_robots),len(self.orders)))        
         
         for oi, order in enumerate(self.orders):
+            # check if there are previous order with same position
+            add_weigh = 0
+            for oii in range(0, oi):
+                if order.get_start() == self.orders[oii].get_start():
+                    add_weigh = float('inf')
+                
+            
             for bi, bot in enumerate(self.free_robots):                
                 #self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
                 
                 #self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) + (self.total_time - order.appear_t* 60) 
 
-                self.score_table[bi,oi] = np.hypot(bot.get_pose()[0]-order.get_start()[0],bot.get_pose()[1]-order.get_start()[1]) + np.hypot(order.get_start()[0]-order.get_final()[0],order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) 
+                self.score_table[bi,oi] = np.hypot(bot.get_pose()[0]-order.get_start()[0],bot.get_pose()[1]-order.get_start()[1]) + np.hypot(order.get_start()[0]-order.get_final()[0],order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) + add_weigh
                 
                 # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
@@ -542,7 +549,7 @@ def work_with_input(stop_time_kostyl = {}, robot_num_kostyl = {}):
                 sys.stdout.flush()
     
 if __name__ == '__main__': 
-    stop_time_kostyl = {4:19, 128:16, 180:16, 384:4, 1024:3, 1000:3}
+    stop_time_kostyl = {4:19, 128:16, 180:16, 384:4, 1024:2, 1000:2}
     robot_num_kostyl = {4: 1, 128:2, 180:2, 384:1, 1024:1, 1000:1}
     #for i in range(1,10):
         #print(f"Test {i}")
