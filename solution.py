@@ -522,7 +522,7 @@ class Robot(object):
         return self.__str__()
         
 class OrderTable(object):
-    def __init__(self, robots, MAP, MaxTips, Cost_c):
+    def __init__(self, robots, MAP, MaxTips, Cost_c, D):
         self.MAP = MAP        
         self.free_robots = robots                
         self.busy_robots = []                
@@ -530,8 +530,9 @@ class OrderTable(object):
         self.total_time = 0
         self.MaxTips = MaxTips
         self.RobotsCost = Cost_c * len(robots)
-        
+        self.D = D # orders nums
         self.reward = 0
+        self.finished_orders = 0
         
     def add_iter(self, iteration):        
         #for order in iteration:
@@ -561,8 +562,12 @@ class OrderTable(object):
                 #self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
                 
                 #self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) + (self.total_time - order.appear_t* 60) 
-
-                self.score_table[bi,oi] = np.hypot(bot.get_pose()[0]-order.get_start()[0],bot.get_pose()[1]-order.get_start()[1]) + np.hypot(order.get_start()[0]-order.get_final()[0],order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) + add_weigh
+                
+                # euclidean
+                #self.score_table[bi,oi] = np.hypot(bot.get_pose()[0]-order.get_start()[0],bot.get_pose()[1]-order.get_start()[1]) + np.hypot(order.get_start()[0]-order.get_final()[0],order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) + add_weigh
+                
+                # manhattan
+                self.score_table[bi,oi] = abs(bot.get_pose()[0]-order.get_start()[0]) + abs(bot.get_pose()[1]-order.get_start()[1]) + abs(order.get_start()[0]-order.get_final()[0]) + abs(order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) + add_weigh
                 
                 # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
@@ -631,15 +636,16 @@ class OrderTable(object):
         print('free',self.free_robots)
         print('busy',self.busy_robots)
         
-    def do_iter(self, draw = False):
+    def do_iter(self, draw = False, fake = False):
         self.rover_actions = []
         for r in range(len(self.free_robots)+len(self.busy_robots)):
             self.rover_actions.append([])
         
         for s in range(60):
-            self.make_table()                            
-            #self.greedy_task()
-            self.hungarian_task()
+            if not fake:
+                self.make_table()                            
+                #self.greedy_task()
+                self.hungarian_task()
             self.do_step(draw) 
     
     def motion(self, start, end):
@@ -689,6 +695,7 @@ class OrderTable(object):
                 bot.state = Robot.IDLE
                 self.rover_actions[bot.id].append('S')
                 self.reward += max(0, self.MaxTips - (self.total_time - bot.ord_time))
+                self.finished_orders += 1
             elif bot.state == Robot.IDLE:
                 remove_idle.append(bi)
                 bot.path1 = []
@@ -736,7 +743,7 @@ def test_on_file(stop_time_kostyl = {},robot_num_kostyl = {}, draw = False, test
         rovers.append(Robot(rover_start[0], rover_start[1], r))
         #rovers.append(Robot(3, 3, r))    
         
-    OT = OrderTable(rovers, IE.MAP, IE.MaxTips, IE.Cost_c)
+    OT = OrderTable(rovers, IE.MAP, IE.MaxTips, IE.Cost_c, IE.D)
     
     if draw:
         OT.MAP.draw_map()
@@ -745,20 +752,22 @@ def test_on_file(stop_time_kostyl = {},robot_num_kostyl = {}, draw = False, test
     #OT.print_bots()        
     
     for i in range(IE.T):
+        if draw:
+            for order in IE.iterations[i]:
+                OT.MAP.draw_order(order)
         if time.clock() - tock < stop_time:
-            #print("{}/{}".format(i,IE.T))
-            if draw:
-                for order in IE.iterations[i]:
-                    OT.MAP.draw_order(order)      
+            #print("real{}/{}".format(i,IE.T))
+                  
                     
             OT.add_iter(IE.iterations[i])                        
-            OT.do_iter()   
+            OT.do_iter(draw)   
             for bot_a in OT.rover_actions:
                 action = "".join(bot_a)
                 #sys.stdout.write(f"{action}\n")
         else:
+            #print("fake{}/{}".format(i,IE.T))
             OT.orders = []
-            OT.do_iter() 
+            OT.do_iter(draw = draw, fake = True) 
             for bot_a in OT.rover_actions:
                 action = "".join(bot_a)
                 #sys.stdout.write(f"{action}\n")
@@ -766,8 +775,9 @@ def test_on_file(stop_time_kostyl = {},robot_num_kostyl = {}, draw = False, test
             #    print('S'*60)
             
     tick = time.clock()
-    print(f"Time = {tick-tock}")
-    print(f"Reward {OT.reward} Cost {OT.RobotsCost}")
+    print(f"\tTime = {tick-tock}")
+    print(f"\tReward {OT.reward} Cost {OT.RobotsCost} Total {max(0, -OT.RobotsCost+OT.reward)}")
+    print(f"Delivers {OT.finished_orders} from {OT.D}")
     
 
 def work_with_input(stop_time_kostyl = {}, robot_num_kostyl = {}):
@@ -799,7 +809,7 @@ def work_with_input(stop_time_kostyl = {}, robot_num_kostyl = {}):
         sys.stdout.write(f"{rover_start[0]+1} {rover_start[1]+1}\n")
         sys.stdout.flush()
         
-    OT = OrderTable(rovers, IR.MAP, IR.MaxTips, IR.Cost_c)
+    OT = OrderTable(rovers, IR.MAP, IR.MaxTips, IR.Cost_c, IR.D)
     for i in range(IR.T):
         iteration = IR.read_iteration(i)
         if time.clock() - tock < stop_time:
@@ -811,16 +821,16 @@ def work_with_input(stop_time_kostyl = {}, robot_num_kostyl = {}):
                 sys.stdout.flush()
         else:
             OT.orders = []
-            OT.do_iter()
+            OT.do_iter(fake = True)
             for bot_a in OT.rover_actions:
                 action = "".join(bot_a)
                 sys.stdout.write(f"{action}\n")
                 sys.stdout.flush()
     
 if __name__ == '__main__': 
-    stop_time_kostyl = {4:19, 128:16, 180:17, 384:4, 1024:2, 1000:2}
-    robot_num_kostyl = {4: 1, 128:4, 180:4, 384:3, 1024:1, 1000:1}
-    #for i in range(2,4):
+    stop_time_kostyl = {4:19, 128:16, 180:17, 384:10, 1024:10, 1000:10}
+    robot_num_kostyl = {4: 1, 128:4, 180:10, 384:99, 1024:1, 1000:1}
+    #for i in range(1,10):
         #print(f"Test {i}")
         #test_on_file(stop_time_kostyl, robot_num_kostyl, False, i)
     work_with_input(stop_time_kostyl, robot_num_kostyl)   
