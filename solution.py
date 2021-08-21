@@ -4,6 +4,8 @@ import numpy as np
 import sys
 import time
 
+
+
 class Map(object):
     def __init__(self, N):
         self.MAP = np.zeros((N, N))
@@ -77,6 +79,7 @@ class Map(object):
         while True:
             # no path?
             if len(open_nodes) == 0:
+                print("Is it normal?")
                 break
             
             min_cost_id = min(open_nodes, key=lambda i: open_nodes[i].cost + self.calc_h(open_nodes[i], goal_node))            
@@ -124,7 +127,9 @@ class Map(object):
         # manhattan metrics
         #return abs(n1.x - n2.x) + abs(n1.y - n2.y)
         # euclidian
-        return np.hypot(n1.x - n2.x, n1.y - n2.y)
+        #return np.hypot(n1.x - n2.x, n1.y - n2.y)#*2
+        # square
+        return (n1.x - n2.x)**2 + (n1.y - n2.y)**2
         
     def node_index(self, node):
         return self.xy_to_index(node.x, node.y)
@@ -253,6 +258,9 @@ class Robot(object):
         self.path1 = []
         self.path2 = []
         
+        self.ord_time = None
+        self.steps = 0
+        
         
     def get_pose(self):
         return (self.x, self.y)
@@ -268,12 +276,16 @@ class Robot(object):
         return self.__str__()
         
 class OrderTable(object):
-    def __init__(self, robots, MAP):
+    def __init__(self, robots, MAP, MaxTips, Cost_c):
         self.MAP = MAP        
         self.free_robots = robots                
         self.busy_robots = []                
         self.orders = []        
         self.total_time = 0
+        self.MaxTips = MaxTips
+        self.RobotsCost = Cost_c * len(robots)
+        
+        self.reward = 0
         
     def add_iter(self, iteration):        
         #for order in iteration:
@@ -317,6 +329,8 @@ class OrderTable(object):
             current.path1 = self.MAP.plan(self.free_robots[r].get_pose(), self.orders[o].get_start())#self.full_table[r][o][0]
             current.path2 = self.MAP.plan(self.orders[o].get_start(), self.orders[o].get_final())#self.full_table[r][o][1]
             current.state = Robot.REACHING_ORDER
+            current.ord_time = self.orders[o].appear_t * 60 
+            current.steps = 0
             
             self.busy_robots.append(current)
             del self.free_robots[r]
@@ -342,7 +356,7 @@ class OrderTable(object):
         print('free',self.free_robots)
         print('busy',self.busy_robots)
         
-    def do_iter(self):
+    def do_iter(self, draw = False):
         self.rover_actions = []
         for r in range(len(self.free_robots)+len(self.busy_robots)):
             self.rover_actions.append([])
@@ -350,7 +364,7 @@ class OrderTable(object):
         for s in range(60):
             self.make_table()                            
             self.greedy_task()                
-            self.do_step() 
+            self.do_step(draw) 
     
     def motion(self, start, end):
         dx = start[0] - end[0]
@@ -367,11 +381,12 @@ class OrderTable(object):
             return 'S'
         return '#'
     
-    def do_step(self):
-        self.total_time += 1
+    def do_step(self, draw = False):
+        
         #self.print_bots()
         remove_idle = []
         for bi, bot in enumerate(self.busy_robots):
+            bot.steps+=1
             if bot.state == Robot.REACHING_ORDER:
                 if len(bot.path1[0]) == 0:
                     bot.state = Robot.PICKING_ORDER
@@ -397,6 +412,7 @@ class OrderTable(object):
             elif bot.state == Robot.UNLOADING:
                 bot.state = Robot.IDLE
                 self.rover_actions[bot.id].append('S')
+                self.reward += max(0, self.MaxTips - (self.total_time - bot.ord_time))
             elif bot.state == Robot.IDLE:
                 remove_idle.append(bi)
                 bot.path1 = []
@@ -412,64 +428,91 @@ class OrderTable(object):
         for bi, bot in enumerate(self.free_robots):
             self.rover_actions[bot.id].append('S')
         
-        #for bot in self.free_robots:
-            #self.MAP.draw_bot(bot.get_pose(), 'blue')
-        #for bot in self.busy_robots:
-            #self.MAP.draw_bot(bot.get_pose(), 'red')
-        #plt.pause(0.0001)
+        if draw:
+            for bot in self.free_robots:
+                self.MAP.draw_bot(bot.get_pose(), 'blue')
+            for bot in self.busy_robots:
+                self.MAP.draw_bot(bot.get_pose(), 'red')
+            plt.title(f"Time {self.total_time} Reward {self.reward} Bots cost {self.RobotsCost}")
+            plt.pause(0.0001)
+        
+        self.total_time += 1
                
     
-def test_on_file():    
+def test_on_file(stop_time_kostyl = {},robot_num_kostyl = {}, draw = False, test_num = 1):    
     tock = time.clock()
-    test_file_path = 'test_data/10'
+    test_file_path = f'test_data/0{test_num}'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
+    if IE.N in stop_time_kostyl:
+        stop_time = stop_time_kostyl[IE.N]
+    else:
+        stop_time = float('inf')
+    
     R = 1
+    if IE.N in robot_num_kostyl:
+        R = robot_num_kostyl[IE.N]
+        
     rovers = []
     for r in range(R):        
         rover_start = IE.MAP.get_random_free_point()
         rovers.append(Robot(rover_start[0], rover_start[1], r))
         #rovers.append(Robot(3, 3, r))    
         
-    OT = OrderTable(rovers, IE.MAP)
+    OT = OrderTable(rovers, IE.MAP, IE.MaxTips, IE.Cost_c)
     
-    #OT.MAP.draw_map()
-    
-    #for bot in rovers:
-        #OT.MAP.draw_bot(bot.get_pose(), 'yellow')
+    if draw:
+        OT.MAP.draw_map()
+        for bot in rovers:
+            OT.MAP.draw_bot(bot.get_pose(), 'yellow')
     #OT.print_bots()        
     
     for i in range(IE.T):
-        if time.clock() - tock < 15:
-            print("{}/{}".format(i,IE.T))
-            #if len(IE.iterations[i]) != 0:
-            #for order in IE.iterations[i]:
-                #OT.MAP.draw_order(order)                
+        if time.clock() - tock < stop_time:
+            #print("{}/{}".format(i,IE.T))
+            if draw:
+                for order in IE.iterations[i]:
+                    OT.MAP.draw_order(order)      
+                    
             OT.add_iter(IE.iterations[i])                        
             OT.do_iter()   
-            print(OT.rover_actions)
+            for bot_a in OT.rover_actions:
+                action = "".join(bot_a)
+                #sys.stdout.write(f"{action}\n")
         else:
-            for r in range(R):
-                print(['S']*60)
+            OT.orders = []
+            OT.do_iter() 
+            for bot_a in OT.rover_actions:
+                action = "".join(bot_a)
+                #sys.stdout.write(f"{action}\n")
+            #for r in range(R):
+            #    print('S'*60)
             
     tick = time.clock()
     print(f"Time = {tick-tock}")
+    print(f"Reward {OT.reward} Cost {OT.RobotsCost}")
+    
 
-def work_with_input():
+def work_with_input(stop_time_kostyl = {}, robot_num_kostyl = {}):
     tock = time.clock()
     IR = InputReader()
     IR.read_params1()
     IR.read_map()
+    #IR.MAP.MAP = IR.MAP.MAP.T
     IR.read_params2()
     
-    R = 2
+    R = 1
+    if IR.N in robot_num_kostyl:
+        R = robot_num_kostyl[IR.N]
     
-    #sys.stdout.write(str(R)+'\n')
+    if IR.N in stop_time_kostyl:
+        stop_time = stop_time_kostyl[IR.N]
+    else:
+        stop_time = float('inf')
     sys.stdout.write(f"{R}\n")
     sys.stdout.flush()
-    #sys.stdout.flush()
-    #print(R)
+    
     
     rovers = []
     rovers_str = ""
@@ -480,10 +523,10 @@ def work_with_input():
         sys.stdout.write(f"{rover_start[0]+1} {rover_start[1]+1}\n")
         sys.stdout.flush()
         
-    OT = OrderTable(rovers, IR.MAP)
+    OT = OrderTable(rovers, IR.MAP, IR.MaxTips, IR.Cost_c)
     for i in range(IR.T):
         iteration = IR.read_iteration(i)
-        if time.clock() - tock < 15:
+        if time.clock() - tock < stop_time:
             OT.add_iter(iteration)
             OT.do_iter()
             for bot_a in OT.rover_actions:
@@ -491,12 +534,18 @@ def work_with_input():
                 sys.stdout.write(f"{action}\n")
                 sys.stdout.flush()
         else:
-            action = 'S'*60
-            for r in range(R):
+            OT.orders = []
+            OT.do_iter()
+            for bot_a in OT.rover_actions:
+                action = "".join(bot_a)
                 sys.stdout.write(f"{action}\n")
                 sys.stdout.flush()
     
 if __name__ == '__main__': 
-    #test_on_file()
-    work_with_input()   
+    stop_time_kostyl = {4:19, 128:16, 180:16, 384:4, 1024:3, 1000:3}
+    robot_num_kostyl = {4: 1, 128:2, 180:2, 384:1, 1024:1, 1000:1}
+    #for i in range(1,10):
+        #print(f"Test {i}")
+        #test_on_file(stop_time_kostyl, robot_num_kostyl, False, i)
+    work_with_input(stop_time_kostyl, robot_num_kostyl)   
     
