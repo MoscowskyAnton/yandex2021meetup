@@ -1,9 +1,8 @@
-
-
 import numpy as np
-from collections import OrderedDict
-import matplotlib.pyplot as plt
+#from collections import OrderedDict
+#import matplotlib.pyplot as plt
 import sys
+import time
 
 class Map(object):
     def __init__(self, N):
@@ -123,9 +122,9 @@ class Map(object):
             
     def calc_h(self, n1, n2):
         # manhattan metrics
-        return abs(n1.x - n2.x) + abs(n1.y - n2.y)
+        #return abs(n1.x - n2.x) + abs(n1.y - n2.y)
         # euclidian
-        #return np.hypot(n1.x - n2.x, n1.y - n2.y)
+        return np.hypot(n1.x - n2.x, n1.y - n2.y)
         
     def node_index(self, node):
         return self.xy_to_index(node.x, node.y)
@@ -171,7 +170,7 @@ class InputReader(object):
     
     def read_params1(self):
         #params = sys.stdin.readline().split()
-        params = list(map(int, input().split()))
+        params = list(map(int, input().split(' ')))
         self.N = params[0] # map size
         self.MaxTips = params[1] # reward for order
         self.Cost_c = params[2] # rover cost
@@ -187,7 +186,7 @@ class InputReader(object):
                     self.MAP.add_free(i,j)
                     
     def read_params2(self):
-        params = list(map(int, input().split()))
+        params = list(map(int, input().split(' ')))
         self.T = params[0] # iterations
         self.D = params[1] # total orders number
         
@@ -197,7 +196,7 @@ class InputReader(object):
         
         for j in range(iter_order_num):
             #iteration.append(Order(sys.stdin.readline().split(), num))
-            iteration.append(Order(list(map(int, input().split())), num))
+            iteration.append(Order(list(map(int, input().split(' '))), num))
         return iteration
 
 class InputEmulator(object):
@@ -222,14 +221,14 @@ class InputEmulator(object):
         self.T = int(params[0]) # iterations
         self.D = int(params[1]) # total orders number
         
-        self.iterations = OrderedDict()
+        self.iterations = {}#OrderedDict()
         for i in range(self.T):
             self.iterations[i] = []
             iter_order_num = int(file.readline())
             for j in range(iter_order_num):
                 self.iterations[i].append(Order(file.readline().split(), i))
                 
-    def print(self):
+    def printt(self):
         print("N = {}".format(self.N))
         print("MaxTips = {}".format(self.MaxTips))
         print("Cost_c = {}".format(self.Cost_c))
@@ -277,26 +276,28 @@ class OrderTable(object):
         self.total_time = 0
         
     def add_iter(self, iteration):        
-        for order in iteration:
-            order.path = self.MAP.plan(order.get_start(), order.get_final())
+        #for order in iteration:
+            #order.path = self.MAP.plan(order.get_start(), order.get_final())
             
         self.orders += iteration
             
     def make_table(self):        
-        #self.full_table = [None] * len(self.orders)] * len(self.free_robots)
+        '''
         self.full_table = []
         for bi in range(len(self.free_robots)):
             self.full_table.append([])
             for oi in range(len(self.orders)):
                 self.full_table[bi].append(None)
+        '''
         self.score_table = np.zeros((len(self.free_robots),len(self.orders)))        
         
         for oi, order in enumerate(self.orders):
             for bi, bot in enumerate(self.free_robots):                
-                self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
-                #print(self.full_table[bi][oi]) # here different
+                #self.full_table[bi][oi] = (self.MAP.plan(bot.get_pose(),order.get_start()), order.path)
                 
-                self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) + (self.total_time - order.appear_t* 60) 
+                #self.score_table[bi,oi] = len(self.full_table[bi][oi][0][0])+len(self.full_table[bi][oi][1][0]) + (self.total_time - order.appear_t* 60) 
+
+                self.score_table[bi,oi] = np.hypot(bot.get_pose()[0]-order.get_start()[0],bot.get_pose()[1]-order.get_start()[1]) + np.hypot(order.get_start()[0]-order.get_final()[0],order.get_start()[1]-order.get_final()[1]) + (self.total_time - order.appear_t* 60) 
                 
                 # TODO expiration time and if more than MaxTips dont do that        
         #print(self.score_table)
@@ -313,8 +314,8 @@ class OrderTable(object):
             
             # those indexes can be wrong, but sometimes
             current = self.free_robots[r]
-            current.path1 = self.full_table[r][o][0]
-            current.path2 = self.full_table[r][o][1]
+            current.path1 = self.MAP.plan(self.free_robots[r].get_pose(), self.orders[o].get_start())#self.full_table[r][o][0]
+            current.path2 = self.MAP.plan(self.orders[o].get_start(), self.orders[o].get_final())#self.full_table[r][o][1]
             current.state = Robot.REACHING_ORDER
             
             self.busy_robots.append(current)
@@ -331,10 +332,10 @@ class OrderTable(object):
             #for row in self.full_table:
                 #print('row len', len(row))
             
-            del self.full_table[r]
-            for row in self.full_table:
-                #print('ln ind row',len(row), o, row)
-                del row[o]
+            #del self.full_table[r]
+            #for row in self.full_table:
+                ##print('ln ind row',len(row), o, row)
+                #del row[o]
             
             
     def print_bots(self):
@@ -419,8 +420,8 @@ class OrderTable(object):
                
     
 def test_on_file():    
-    
-    test_file_path = 'test_data/01'
+    tock = time.clock()
+    test_file_path = 'test_data/10'
     IE = InputEmulator(test_file_path)
     #IE.print()
     
@@ -428,37 +429,47 @@ def test_on_file():
     rovers = []
     for r in range(R):        
         rover_start = IE.MAP.get_random_free_point()
-        #rovers.append(Robot(rover_start[0], rover_start[1], r))
-        rovers.append(Robot(3, 3, r))    
+        rovers.append(Robot(rover_start[0], rover_start[1], r))
+        #rovers.append(Robot(3, 3, r))    
         
     OT = OrderTable(rovers, IE.MAP)
     
-    OT.MAP.draw_map()
+    #OT.MAP.draw_map()
     
-    for bot in rovers:
-        OT.MAP.draw_bot(bot.get_pose(), 'yellow')
+    #for bot in rovers:
+        #OT.MAP.draw_bot(bot.get_pose(), 'yellow')
     #OT.print_bots()        
     
     for i in range(IE.T):
-        print("{}/{}".format(i,IE.T))
-        #if len(IE.iterations[i]) != 0:
-        for order in IE.iterations[i]:
-            OT.MAP.draw_order(order)                
-        OT.add_iter(IE.iterations[i])                        
-        OT.do_iter()   
-        print(OT.rover_actions)
+        if time.clock() - tock < 15:
+            print("{}/{}".format(i,IE.T))
+            #if len(IE.iterations[i]) != 0:
+            #for order in IE.iterations[i]:
+                #OT.MAP.draw_order(order)                
+            OT.add_iter(IE.iterations[i])                        
+            OT.do_iter()   
+            print(OT.rover_actions)
+        else:
+            for r in range(R):
+                print(['S']*60)
+            
+    tick = time.clock()
+    print(f"Time = {tick-tock}")
 
 def work_with_input():
+    tock = time.clock()
     IR = InputReader()
     IR.read_params1()
     IR.read_map()
     IR.read_params2()
     
-    R = 1
+    R = 2
     
-    #sys.stdout.write("%d\n" % R)
+    #sys.stdout.write(str(R)+'\n')
+    sys.stdout.write(f"{R}\n")
+    sys.stdout.flush()
     #sys.stdout.flush()
-    print(R)
+    #print(R)
     
     rovers = []
     rovers_str = ""
@@ -466,31 +477,26 @@ def work_with_input():
         rover_start = IR.MAP.get_random_free_point()
         #rover_start = (3,3)
         rovers.append(Robot(rover_start[0], rover_start[1], r))
-        #print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
-        new_str = "{} {}".format(rover_start[0]+1, rover_start[1]+1)
-        #rovers_str += " "+new_str
-        #sys.stdout.write(new_str+"\n")
-        #sys.stdout.write("%d %d\n" % rover_start)
-        #sys.stdout.flush()
-        #print("{} {}".format(rover_start[0]+1, rover_start[1]+1))
-        print(new_str)
-    #print(rovers_str)
-    #sys.stdout.flush()
+        sys.stdout.write(f"{rover_start[0]+1} {rover_start[1]+1}\n")
+        sys.stdout.flush()
         
     OT = OrderTable(rovers, IR.MAP)
     for i in range(IR.T):
         iteration = IR.read_iteration(i)
-        OT.add_iter(iteration)
-        OT.do_iter()
-        for bot_a in OT.rover_actions:
-            #sys.stdout.write("".join(bot_a)+"\n")
-            print("".join(bot_a), flush = True)
-            #sys.stdout.flush()
-        
-    
+        if time.clock() - tock < 15:
+            OT.add_iter(iteration)
+            OT.do_iter()
+            for bot_a in OT.rover_actions:
+                action = "".join(bot_a)
+                sys.stdout.write(f"{action}\n")
+                sys.stdout.flush()
+        else:
+            action = 'S'*60
+            for r in range(R):
+                sys.stdout.write(f"{action}\n")
+                sys.stdout.flush()
     
 if __name__ == '__main__': 
     #test_on_file()
-    work_with_input()
-    
+    work_with_input()   
     
